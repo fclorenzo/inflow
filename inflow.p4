@@ -140,15 +140,16 @@ control InFlowIngress(inout headers_t hdr,
     // ACTION: Declassification (Destination Domain / S3)
     // Removes the IFC header
     action inflow_declassify() {
-        if (hdr.ifc.isValid()) {
-            // 1. Invalidate the header (Deparser will skip it)
-            hdr.ifc.setInvalid();
+        // We don't need to check if it is valid. 
+        // If it is valid, this makes it invalid.
+        // If it is already invalid, it stays invalid (no-op).
+        hdr.ifc.setInvalid();
             
-            // 2. Restore EtherType to standard IPv4
-            hdr.eth.etherType = ETHERTYPE_IPV4;
-        }
+        // Restore EtherType to standard IPv4
+        // This ensures the next hop interprets the payload correctly
+        hdr.eth.etherType = ETHERTYPE_IPV4;
     }
-
+    
     // ACTION: Transit (No-Op for now, just validation in future)
     action inflow_transit() {
         // In the future, we will check Auth here.
