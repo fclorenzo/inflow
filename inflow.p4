@@ -96,13 +96,110 @@ parser InFlowParser(packet_in packet,
 
 // --- 3. Ingress Control (Phase 2) ---
 
-// This is the "Ingress Match-Action Pipeline" [cite: 35, 90]
-// We will add all the InFlow logic (auth, policy) here in the next phase.
+// --- 3. Ingress Control (Phase 2 Implementation) ---
+
 control InFlowIngress(inout headers_t hdr,
                       inout metadata_t meta,
                       inout standard_metadata_t std_meta) {
+
+    // --- Actions ---
+
+    action drop() {
+        mark_to_drop(std_meta);
+    }
+
+    // Standard IPv4 forwarding action [cite: 2808, 1431]
+    action ipv4_forward(bit<48> dstAddr, bit<9> port) {
+        // Update DMAC/SMAC (simplified for this lab)
+        hdr.eth.srcAddr = hdr.eth.dstAddr; 
+        hdr.eth.dstAddr = dstAddr;
+        
+        // Set egress port
+        std_meta.egress_spec = port;
+        
+        // Decrement TTL
+        hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
+    }
+
+    // ACTION: Tagging (Source Domain / S1)
+    // Adds the IFC header and sets the initial masks
+    action inflow_tag(bit<16> conf, bit<16> integ, bit<8> auth) {
+        // 1. Validate the header
+        hdr.ifc.setValid();
+        
+        // 2. Set the data
+        hdr.ifc.conf_mask = conf;
+        hdr.ifc.integ_mask = integ;
+        hdr.ifc.auth = auth;
+
+        // 3. Update EtherType to indicate this is now an InFlow packet
+        // The parser will see this on the NEXT switch
+        hdr.eth.etherType = ETHERTYPE_INFLOW;
+    }
+
+    // ACTION: Declassification (Destination Domain / S3)
+    // Removes the IFC header
+    action inflow_declassify() {
+        if (hdr.ifc.isValid()) {
+            // 1. Invalidate the header (Deparser will skip it)
+            hdr.ifc.setInvalid();
+            
+            // 2. Restore EtherType to standard IPv4
+            hdr.eth.etherType = ETHERTYPE_IPV4;
+        }
+    }
+
+    // ACTION: Transit (No-Op for now, just validation in future)
+    action inflow_transit() {
+        // In the future, we will check Auth here.
+        // For now, we just let it pass.
+    }
+
+    // --- Tables ---
+
+    // Table 1: Routing
+    // Matches Destination IP -> Output Port
+    table ipv4_lpm {
+        key = {
+            hdr.ipv4.dstAddr: lpm;
+        }
+        actions = {
+            ipv4_forward;
+            drop;
+            NoAction;
+        }
+        size = 1024;
+        default_action = drop();
+    }
+
+    // Table 2: Security Operations
+    // Matches Ingress Port -> Security Action (Tag/Declassify)
+    // This allows the Controller to tell S1 "Tag packets coming from Host 1"
+    table inflow_op {
+        key = {
+            std_meta.ingress_port: exact;
+        }
+        actions = {
+            inflow_tag;
+            inflow_declassify;
+            inflow_transit;
+            NoAction;
+        }
+        size = 1024;
+        default_action = NoAction();
+    }
+
+    // --- Pipeline Logic ---
     apply {
-        // Empty for Phase 1.
+        // 1. First, decide on the security operation
+        if (hdr.ipv4.isValid()) {
+            // Only process if we actually found an IPv4 packet 
+            // (either directly or inside InFlow)
+            inflow_op.apply();
+            
+            // 2. Then, route the packet
+            ipv4_lpm.apply();
+        }
     }
 }
 
