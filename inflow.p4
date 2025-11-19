@@ -86,13 +86,13 @@ parser InFlowParser(packet_in packet,
     // This state is entered for standard IPv4 or after parsing InFlow
     state parse_ipv4 {
         packet.extract(hdr.ipv4);
-        transition accept;
+        //transition accept;
     }
 
-    state accept {
+    //state accept {
         /* End of parsing */
-    }
-}
+    //}
+//}
 
 // --- 3. Ingress Control (Phase 2) ---
 
