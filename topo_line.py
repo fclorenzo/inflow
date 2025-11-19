@@ -4,6 +4,8 @@ import os
 import argparse
 from time import sleep
 
+sys.path.append("utils") 
+
 from mininet.net import Mininet
 from mininet.topo import Topo
 from mininet.log import setLogLevel, info
@@ -11,7 +13,7 @@ from mininet.cli import CLI
 
 # These classes are standard in the P4 tutorial VM environment
 # If you get an import error, ensure p4_mininet.py is in your path
-from utils.p4_mininet import P4Switch, P4Host
+from p4_mininet import P4Switch, P4Host
 
 class LinearInFlowTopo(Topo):
     """
