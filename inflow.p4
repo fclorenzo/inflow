@@ -92,7 +92,7 @@ parser InFlowParser(packet_in packet,
     //state accept {
         /* End of parsing */
     //}
-//}
+}
 
 // --- 3. Ingress Control (Phase 2) ---
 
