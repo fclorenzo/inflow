@@ -11,7 +11,7 @@ from mininet.cli import CLI
 
 # These classes are standard in the P4 tutorial VM environment
 # If you get an import error, ensure p4_mininet.py is in your path
-from p4_mininet import P4Switch, P4Host
+from utils.p4_mininet import P4Switch, P4Host
 
 class LinearInFlowTopo(Topo):
     """
