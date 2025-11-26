@@ -229,17 +229,52 @@ control InFlowDeparser(packet_out packet, in headers_t hdr) {
 }
 
 // --- 6. Checksum Controls ---
-// V1Model requires these controls [cite: 87, 94]
-
 control InFlowVerifyChecksum(inout headers_t hdr, inout metadata_t meta) {
     apply {
-        // Verification is left empty for this skeleton
+        // Verify IPv4 Checksum
+        verify_checksum(
+            hdr.ipv4.isValid(),
+            {
+                hdr.ipv4.version,
+                hdr.ipv4.ihl,
+                hdr.ipv4.diffserv,
+                hdr.ipv4.totalLen,
+                hdr.ipv4.identification,
+                hdr.ipv4.flags,
+                hdr.ipv4.fragOffset,
+                hdr.ipv4.ttl,
+                hdr.ipv4.protocol,
+                hdr.ipv4.srcAddr,
+                hdr.ipv4.dstAddr
+            },
+            hdr.ipv4.hdrChecksum,
+            HashAlgorithm.csum16
+        );
     }
 }
 
 control InFlowComputeChecksum(inout headers_t hdr, inout metadata_t meta) {
     apply {
-        // Computation is left empty for this skeleton
+        // Recalculate IPv4 Checksum
+        // This is required because we modified the TTL in Ingress
+        update_checksum(
+            hdr.ipv4.isValid(),
+            {
+                hdr.ipv4.version,
+                hdr.ipv4.ihl,
+                hdr.ipv4.diffserv,
+                hdr.ipv4.totalLen,
+                hdr.ipv4.identification,
+                hdr.ipv4.flags,
+                hdr.ipv4.fragOffset,
+                hdr.ipv4.ttl,
+                hdr.ipv4.protocol,
+                hdr.ipv4.srcAddr,
+                hdr.ipv4.dstAddr
+            },
+            hdr.ipv4.hdrChecksum,
+            HashAlgorithm.csum16
+        );
     }
 }
 
