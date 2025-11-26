@@ -67,8 +67,6 @@ def main():
 
     topo = LinearInFlowTopo(args.behavioral_exe, args.json)
     
-    # We disable the controller because we are using static rules/P4 logic
-    # strictly for the data plane development right now.
     net = Mininet(topo=topo,
                   host=P4Host,
                   switch=P4Switch,
@@ -77,18 +75,41 @@ def main():
     net.start()
 
     print("--- Network Started ---")
-    print("Topology: h1 <-> s1 <-> s2 <-> s3 <-> h2")
-    print("You can now use the Mininet CLI.")
-    print("Note: Pings will FAIL until we program the switch logic in the next phase.")
     
-    # Helper to configure host interfaces (ARP/Routes) statically
+    # --- AUTOMATED RULE LOADING (The "Default Configuration") ---
+    # We get the switch objects from the network
+    s1 = net.get('s1')
+    s2 = net.get('s2')
+    s3 = net.get('s3')
+
+    print("--- Loading Static Table Entries ---")
+    
+    # We verify if the files exist to avoid crashing
+    if os.path.exists("s1_commands.txt"):
+        print("Configuring s1 (Ingress)...")
+        # We use the switch's .cmd() method to run the CLI command locally
+        # Note: We must match the thrift port defined in the topology class (9090)
+        s1.cmd('simple_switch_CLI --thrift-port 9090 < s1_commands.txt')
+    
+    if os.path.exists("s2_commands.txt"):
+        print("Configuring s2 (Transit)...")
+        s2.cmd('simple_switch_CLI --thrift-port 9091 < s2_commands.txt')
+
+    if os.path.exists("s3_commands.txt"):
+        print("Configuring s3 (Egress)...")
+        s3.cmd('simple_switch_CLI --thrift-port 9092 < s3_commands.txt')
+
+    print("--- Rules Loaded Successfully ---")
+
+    # --- Static ARP and Routing (Keep this from before) ---
     h1 = net.get('h1')
     h2 = net.get('h2')
-    h1.setARP("10.0.3.2", "00:00:00:00:03:02") # Tell h1 where h2 is
-    h2.setARP("10.0.1.1", "00:00:00:00:01:01") # Tell h2 where h1 is
+    h1.setARP("10.0.3.2", "00:00:00:00:03:02") 
+    h2.setARP("10.0.1.1", "00:00:00:00:01:01")
     h1.setDefaultRoute("dev eth0")
     h2.setDefaultRoute("dev eth0")
 
+    # Now we drop into the CLI, and pings should work immediately
     CLI(net)
     net.stop()
 

@@ -1,0 +1,11 @@
+# --- Routing (ipv4_lpm) ---
+# Traffic to h2 goes out port 2 (to s3)
+table_add ipv4_lpm ipv4_forward 10.0.3.2/32 => 00:00:00:00:03:02 2
+# Traffic to h1 goes out port 1 (to s1)
+table_add ipv4_lpm ipv4_forward 10.0.1.1/32 => 00:00:00:00:01:01 1
+
+# --- InFlow Operations (inflow_op) ---
+# Traffic from S1 -> Transit
+table_add inflow_op inflow_transit 1 => 
+# Traffic from S3 -> Transit
+table_add inflow_op inflow_transit 2 =>

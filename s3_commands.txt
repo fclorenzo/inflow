@@ -1,0 +1,13 @@
+# --- Routing (ipv4_lpm) ---
+# Traffic to h2 goes out port 2 (to h2)
+table_add ipv4_lpm ipv4_forward 10.0.3.2/32 => 00:00:00:00:03:02 2
+# Traffic to h1 goes out port 1 (to s2)
+table_add ipv4_lpm ipv4_forward 10.0.1.1/32 => 00:00:00:00:01:01 1
+
+# --- InFlow Operations (inflow_op) ---
+# Port 1 comes from S2 (Tunnel traffic) -> DECLASSIFY (End InFlow)
+table_add inflow_op inflow_declassify 1 => 
+
+# Port 2 comes from Host 2 (Reply traffic) -> TAG (Start InFlow)
+# Args: conf_mask=0x1, integ_mask=0x1, auth=0x55
+table_add inflow_op inflow_tag 2 => 1 1 0x55
