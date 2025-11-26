@@ -11,3 +11,8 @@ table_add inflow_op inflow_tag 1 => 1 1 0x55
 
 # Port 2 comes from Switch 2 (Return traffic) -> DECLASSIFY (End InFlow)
 table_add inflow_op inflow_declassify 2 =>
+# --- ARP Forwarding (l2_fwd) ---
+# If ARP comes in Port 1, send to Port 2
+table_add l2_fwd l2_forward 1 => 2
+# If ARP comes in Port 2, send to Port 1
+table_add l2_fwd l2_forward 2 => 1

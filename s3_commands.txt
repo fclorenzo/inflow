@@ -11,3 +11,8 @@ table_add inflow_op inflow_declassify 1 =>
 # Port 2 comes from Host 2 (Reply traffic) -> TAG (Start InFlow)
 # Args: conf_mask=0x1, integ_mask=0x1, auth=0x55
 table_add inflow_op inflow_tag 2 => 1 1 0x55
+# --- ARP Forwarding (l2_fwd) ---
+# If ARP comes in Port 1, send to Port 2
+table_add l2_fwd l2_forward 1 => 2
+# If ARP comes in Port 2, send to Port 1
+table_add l2_fwd l2_forward 2 => 1

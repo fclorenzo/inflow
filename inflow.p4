@@ -121,6 +121,11 @@ control InFlowIngress(inout headers_t hdr,
         hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
     }
 
+    // Action: Simple L2 Forwarding (for ARP)
+    action l2_forward(bit<9> port) {
+        std_meta.egress_spec = port;
+    }
+
     // ACTION: Tagging (Source Domain / S1)
     // Adds the IFC header and sets the initial masks
     action inflow_tag(bit<16> conf, bit<16> integ, bit<8> auth) {
@@ -190,16 +195,31 @@ control InFlowIngress(inout headers_t hdr,
         default_action = NoAction();
     }
 
+    // New Table: Handle ARP (and other L2 broadcast)
+    table l2_fwd {
+        key = {
+            std_meta.ingress_port: exact;
+        }
+        actions = {
+            l2_forward;
+            drop;
+        }
+        size = 1024;
+        default_action = drop();
+    }
+
     // --- Pipeline Logic ---
     apply {
-        // 1. First, decide on the security operation
+        // Check if it is an IPv4 packet (or InFlow-encapsulated IPv4)
         if (hdr.ipv4.isValid()) {
-            // Only process if we actually found an IPv4 packet 
-            // (either directly or inside InFlow)
+            // 1. Security Operations
             inflow_op.apply();
-            
-            // 2. Then, route the packet
+            // 2. Routing
             ipv4_lpm.apply();
+        } 
+        // If NOT IPv4, check if it is ARP (0x0806)
+        else if (hdr.eth.etherType == 0x0806) {
+            l2_fwd.apply();
         }
     }
 }
