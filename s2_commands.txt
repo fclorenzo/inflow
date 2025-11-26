@@ -1,16 +1,11 @@
-# --- Routing (ipv4_lpm) ---
-# Traffic to h2 goes out port 2 (to s3)
-table_add ipv4_lpm ipv4_forward 10.0.3.2/32 => 00:00:00:00:03:02 2
-# Traffic to h1 goes out port 1 (to s1)
-table_add ipv4_lpm ipv4_forward 10.0.1.1/32 => 00:00:00:00:01:01 1
+# --- Routing ---
+table_add InFlowIngress.ipv4_lpm ipv4_forward 10.0.3.2/32 => 00:00:00:00:03:02 2
+table_add InFlowIngress.ipv4_lpm ipv4_forward 10.0.1.1/32 => 00:00:00:00:01:01 1
 
-# --- InFlow Operations (inflow_op) ---
-# Traffic from S1 -> Transit
-table_add inflow_op inflow_transit 1 => 
-# Traffic from S3 -> Transit
-table_add inflow_op inflow_transit 2 =>
-# --- ARP Forwarding (l2_fwd) ---
-# If ARP comes in Port 1, send to Port 2
-table_add l2_fwd l2_forward 1 => 2
-# If ARP comes in Port 2, send to Port 1
-table_add l2_fwd l2_forward 2 => 1
+# --- InFlow Operations ---
+table_add InFlowIngress.inflow_op inflow_transit 1 => 
+table_add InFlowIngress.inflow_op inflow_transit 2 => 
+
+# --- ARP Forwarding ---
+table_add InFlowIngress.l2_fwd l2_forward 1 => 2
+table_add InFlowIngress.l2_fwd l2_forward 2 => 1
