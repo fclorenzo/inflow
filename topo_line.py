@@ -117,8 +117,8 @@ def main():
     # 5. Configure Hosts (Static ARP/Routes)
     h1.setARP("10.0.3.2", "00:00:00:00:03:02") 
     h2.setARP("10.0.1.1", "00:00:00:00:01:01")
-    h1.setDefaultRoute("dev eth0")
-    h2.setDefaultRoute("dev eth0")
+    h1.setDefaultRoute("dev h1-eth0")
+    h2.setDefaultRoute("dev h2-eth0")
 
     # 6. Open CLI
     CLI(net)
