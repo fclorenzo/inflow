@@ -91,32 +91,31 @@ def main(p4info_file_path, bmv2_file_path):
     p4info_helper = p4runtime_lib.helper.P4InfoHelper(p4info_file_path)
 
     try:
-        # Create switch connections
-        # Note: proto_dump_file writes all P4Runtime messages to a file for debugging
+        # --- Create switch connections (USING CORRECT GRPC PORTS) ---
         s1 = p4runtime_lib.bmv2.Bmv2SwitchConnection(
             name='s1',
-            address='127.0.0.1:9090',
+            address='127.0.0.1:9551',  # Correct gRPC port
             device_id=0,
             proto_dump_file='logs/s1-p4runtime-requests.txt')
         
         s2 = p4runtime_lib.bmv2.Bmv2SwitchConnection(
             name='s2',
-            address='127.0.0.1:9091',
+            address='127.0.0.1:9552',  # Correct gRPC port
             device_id=1,
             proto_dump_file='logs/s2-p4runtime-requests.txt')
 
         s3 = p4runtime_lib.bmv2.Bmv2SwitchConnection(
             name='s3',
-            address='127.0.0.1:9092',
+            address='127.0.0.1:9553',  # Correct gRPC port
             device_id=2,
             proto_dump_file='logs/s3-p4runtime-requests.txt')
 
-        # Send MasterArbitrationUpdate to establish this controller as master
+        # Send MasterArbitrationUpdate
         s1.MasterArbitrationUpdate()
         s2.MasterArbitrationUpdate()
         s3.MasterArbitrationUpdate()
 
-        # Install the P4 program on the switches
+        # Install the P4 program
         s1.SetForwardingPipelineConfig(p4info=p4info_helper.p4info,
                                        bmv2_json_file_path=bmv2_file_path)
         s2.SetForwardingPipelineConfig(p4info=p4info_helper.p4info,

@@ -8,52 +8,58 @@ from time import sleep
 sys.path.append("utils") 
 
 from mininet.net import Mininet
-from mininet.topo import Topo
 from mininet.log import setLogLevel, info
 from mininet.cli import CLI
+from mininet.node import Switch, Host
 
-# These classes are standard in the P4 tutorial VM environment
-# If you get an import error, ensure p4_mininet.py is in your path
-from p4_mininet import P4Switch, P4Host
+# --- P4 Classes ---
 
-class LinearInFlowTopo(Topo):
-    """
-    Linear Topology for InFlow:
-    h1 <--> s1 <--> s2 <--> s3 <--> h2
-    """
-    def __init__(self, sw_path, json_path, **opts):
-        Topo.__init__(self, **opts)
+class P4Host(Host):
+    def config(self, **params):
+        r = super(P4Host, self).config(**params)
+        for off in ["rx", "tx", "sg"]:
+            cmd = "/sbin/ethtool --offload %s %s off" % (self.defaultIntf(), off)
+            self.cmd(cmd)
+        self.cmd("sysctl -w net.ipv6.conf.all.disable_ipv6=1")
+        self.cmd("sysctl -w net.ipv6.conf.default.disable_ipv6=1")
+        self.cmd("sysctl -w net.ipv6.conf.lo.disable_ipv6=1")
+        return r
 
-        # --- Add Hosts ---
-        # We assign static IPs and MACs to simplify debugging
-        h1 = self.addHost('h1', ip="10.0.1.1/24", mac="00:00:00:00:01:01")
-        h2 = self.addHost('h2', ip="10.0.3.2/24", mac="00:00:00:00:03:02")
+class P4Switch(Switch):
+    def __init__(self, name, sw_path=None, json_path=None, 
+                 thrift_port=None, grpc_port=None, **kwargs):
+        Switch.__init__(self, name, **kwargs)
+        self.sw_path = sw_path
+        self.json_path = json_path
+        self.thrift_port = thrift_port
+        self.grpc_port = grpc_port
+        self.logfile = '/tmp/p4s.{}.log'.format(self.name)
 
-        # --- Add P4 Switches ---
-        # s1: The "Ingress" (Tagging) Switch
-        s1 = self.addSwitch('s1',
-                            sw_path=sw_path,
-                            json_path=json_path,
-                            thrift_port=9090) # Default Thrift port
+    def start(self, controllers):
+        args = [self.sw_path]
+        for intf in self.intfs.values():
+            if not intf.IP():
+                port_index = self.ports[intf]
+                args.extend(['-i', '{}@{}'.format(port_index, intf.name)])
+        if self.thrift_port:
+            args.extend(['--thrift-port', str(self.thrift_port)])
+        args.extend(['--cpu-port', '255'])
+        args.append(self.json_path)
+        args.append("--log-console")
+        if self.grpc_port:
+            args.append("--") 
+            args.append("--grpc-server-addr 0.0.0.0:{}".format(self.grpc_port))
+            args.append("--device-id {}".format(self.dpid))
 
-        # s2: The "Transit" (Tag Update) Switch
-        s2 = self.addSwitch('s2',
-                            sw_path=sw_path,
-                            json_path=json_path,
-                            thrift_port=9091) # Increment port
+        cmd_str = ' '.join(args) + ' > ' + self.logfile + ' 2>&1 &'
+        self.cmd(cmd_str)
 
-        # s3: The "Egress" (Declassification) Switch
-        s3 = self.addSwitch('s3',
-                            sw_path=sw_path,
-                            json_path=json_path,
-                            thrift_port=9092) # Increment port
+    def stop(self):
+        self.cmd('kill %' + self.sw_path)
+        self.cmd('wait')
+        super(P4Switch, self).stop()
 
-        # --- Add Links ---
-        # Wiring them in a line
-        self.addLink(h1, s1) # s1-eth1 connects to h1
-        self.addLink(s1, s2) # s1-eth2 connects to s2-eth2 (usually)
-        self.addLink(s2, s3)
-        self.addLink(s3, h2)
+# --- Main ---
 
 def main():
     parser = argparse.ArgumentParser(description='InFlow Linear Topology')
@@ -65,51 +71,46 @@ def main():
 
     setLogLevel('info')
 
-    topo = LinearInFlowTopo(args.behavioral_exe, args.json)
+    # Initialize Mininet without a topo object (we build it manually below)
+    net = Mininet(topo=None, host=P4Host, switch=P4Switch, controller=None)
     
-    net = Mininet(topo=topo,
-                  host=P4Host,
-                  switch=P4Switch,
-                  controller=None) 
-
+    # 1. Add Hosts
+    h1 = net.addHost('h1', ip="10.0.1.1/24", mac="00:00:00:00:01:01")
+    h2 = net.addHost('h2', ip="10.0.3.2/24", mac="00:00:00:00:03:02")
+    
+    # 2. Add Switches with distinct Thrift AND gRPC ports
+    # S1: Thrift 9090, gRPC 9551
+    s1 = net.addSwitch('s1', sw_path=args.behavioral_exe, json_path=args.json, 
+                       thrift_port=9090, grpc_port=9551, dpid="0")
+    
+    # S2: Thrift 9091, gRPC 9552
+    s2 = net.addSwitch('s2', sw_path=args.behavioral_exe, json_path=args.json, 
+                       thrift_port=9091, grpc_port=9552, dpid="1")
+    
+    # S3: Thrift 9092, gRPC 9553
+    s3 = net.addSwitch('s3', sw_path=args.behavioral_exe, json_path=args.json, 
+                       thrift_port=9092, grpc_port=9553, dpid="2")
+    
+    # 3. Add Links
+    net.addLink(h1, s1)
+    net.addLink(s1, s2)
+    net.addLink(s2, s3)
+    net.addLink(s3, h2)
+    
+    # 4. Start Network
     net.start()
-
     print("--- Network Started ---")
-    
-    # --- AUTOMATED RULE LOADING (The "Default Configuration") ---
-    # We get the switch objects from the network
-    s1 = net.get('s1')
-    s2 = net.get('s2')
-    s3 = net.get('s3')
+    print("S1: Thrift 9090, gRPC 9551")
+    print("S2: Thrift 9091, gRPC 9552")
+    print("S3: Thrift 9092, gRPC 9553")
 
-    #print("--- Loading Static Table Entries ---")
-    
-    # We verify if the files exist to avoid crashing
-    #if os.path.exists("s1_commands.txt"):
-        #print("Configuring s1 (Ingress)...")
-        # We use the switch's .cmd() method to run the CLI command locally
-        # Note: We must match the thrift port defined in the topology class (9090)
-        #s1.cmd('simple_switch_CLI --thrift-port 9090 < s1_commands.txt')
-    
-    #if os.path.exists("s2_commands.txt"):
-        #print("Configuring s2 (Transit)...")
-        #s2.cmd('simple_switch_CLI --thrift-port 9091 < s2_commands.txt')
-
-    #if os.path.exists("s3_commands.txt"):
-        #print("Configuring s3 (Egress)...")
-        #s3.cmd('simple_switch_CLI --thrift-port 9092 < s3_commands.txt')
-
-    #print("--- Rules Loaded Successfully ---")
-
-    # --- Static ARP and Routing (Keep this from before) ---
-    h1 = net.get('h1')
-    h2 = net.get('h2')
+    # 5. Configure Hosts (Static ARP/Routes)
     h1.setARP("10.0.3.2", "00:00:00:00:03:02") 
     h2.setARP("10.0.1.1", "00:00:00:00:01:01")
     h1.setDefaultRoute("dev eth0")
     h2.setDefaultRoute("dev eth0")
 
-    # Now we drop into the CLI, and pings should work immediately
+    # 6. Open CLI
     CLI(net)
     net.stop()
 
