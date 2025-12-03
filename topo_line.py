@@ -36,34 +36,32 @@ class P4Switch(Switch):
         self.logfile = '/tmp/p4s.{}.log'.format(self.name)
 
     def start(self, controllers):
+        # 1. Executable
         args = [self.sw_path]
         
-        # --- 1. Switch Options (Must come BEFORE JSON) ---
+        # 2. JSON Config (MOVE TO FRONT)
+        # This matches your working manual test: "simple_switch_grpc inflow.json ..."
+        args.append(self.json_path)
+
+        # 3. Global Flags
         args.extend(['--device-id', str(self.dpid)])
-        args.append("--log-console") # Moved UP
+        args.append("--log-console")
         if self.thrift_port:
             args.extend(['--thrift-port', str(self.thrift_port)])
         args.extend(['--cpu-port', '255'])
         
+        # 4. Interfaces
         for intf in self.intfs.values():
             if not intf.IP():
                 port_index = self.ports[intf]
                 args.extend(['-i', '{}@{}'.format(port_index, intf.name)])
         
-        # --- 2. Positional Argument: JSON Config ---
-        # This MUST be the last argument before the '--' separator
-        args.append(self.json_path)
-        
-        # --- 3. P4Runtime Options (Must come AFTER --) ---
+        # 5. GRPC Options (After separator)
         if self.grpc_port:
             args.append("--") 
             args.append("--grpc-server-addr 0.0.0.0:{}".format(self.grpc_port))
 
         cmd_str = ' '.join(args) + ' > ' + self.logfile + ' 2>&1 &'
-        print("\n" + "="*60)
-        print(f"DEBUG: EXECUTION STRING FOR {self.name}:")
-        print(cmd_str)
-        print("="*60 + "\n")
         print("Starting P4Switch {}: {}".format(self.name, cmd_str))
         self.cmd(cmd_str)
 
