@@ -82,24 +82,24 @@ def main():
     s2 = net.get('s2')
     s3 = net.get('s3')
 
-    print("--- Loading Static Table Entries ---")
+    #print("--- Loading Static Table Entries ---")
     
     # We verify if the files exist to avoid crashing
-    if os.path.exists("s1_commands.txt"):
-        print("Configuring s1 (Ingress)...")
+    #if os.path.exists("s1_commands.txt"):
+        #print("Configuring s1 (Ingress)...")
         # We use the switch's .cmd() method to run the CLI command locally
         # Note: We must match the thrift port defined in the topology class (9090)
-        s1.cmd('simple_switch_CLI --thrift-port 9090 < s1_commands.txt')
+        #s1.cmd('simple_switch_CLI --thrift-port 9090 < s1_commands.txt')
     
-    if os.path.exists("s2_commands.txt"):
-        print("Configuring s2 (Transit)...")
-        s2.cmd('simple_switch_CLI --thrift-port 9091 < s2_commands.txt')
+    #if os.path.exists("s2_commands.txt"):
+        #print("Configuring s2 (Transit)...")
+        #s2.cmd('simple_switch_CLI --thrift-port 9091 < s2_commands.txt')
 
-    if os.path.exists("s3_commands.txt"):
-        print("Configuring s3 (Egress)...")
-        s3.cmd('simple_switch_CLI --thrift-port 9092 < s3_commands.txt')
+    #if os.path.exists("s3_commands.txt"):
+        #print("Configuring s3 (Egress)...")
+        #s3.cmd('simple_switch_CLI --thrift-port 9092 < s3_commands.txt')
 
-    print("--- Rules Loaded Successfully ---")
+    #print("--- Rules Loaded Successfully ---")
 
     # --- Static ARP and Routing (Keep this from before) ---
     h1 = net.get('h1')
