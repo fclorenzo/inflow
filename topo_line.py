@@ -35,7 +35,7 @@ class P4Switch(Switch):
         self.grpc_port = grpc_port
         self.logfile = '/tmp/p4s.{}.log'.format(self.name)
 
-def start(self, controllers):
+    def start(self, controllers):
         # 1. Executable
         args = [self.sw_path]
         
