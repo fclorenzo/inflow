@@ -38,34 +38,26 @@ class P4Switch(Switch):
     def start(self, controllers):
         args = [self.sw_path]
         
-        # 1. Device ID (MOVE THIS UP)
-        # It must be a switch argument, not a GRPC argument
+        # --- 1. Switch Options (Must come BEFORE JSON) ---
         args.extend(['--device-id', str(self.dpid)])
+        args.append("--log-console") # Moved UP
+        if self.thrift_port:
+            args.extend(['--thrift-port', str(self.thrift_port)])
+        args.extend(['--cpu-port', '255'])
         
-        # 2. Interfaces
         for intf in self.intfs.values():
             if not intf.IP():
                 port_index = self.ports[intf]
                 args.extend(['-i', '{}@{}'.format(port_index, intf.name)])
         
-        # 3. Thrift Port
-        if self.thrift_port:
-            args.extend(['--thrift-port', str(self.thrift_port)])
-            
-        # 4. CPU Port
-        args.extend(['--cpu-port', '255'])
-        
-        # 5. JSON Config (Must be the last BMv2 argument)
+        # --- 2. Positional Argument: JSON Config ---
+        # This MUST be the last argument before the '--' separator
         args.append(self.json_path)
         
-        # 6. Logging
-        args.append("--log-console")
-        
-        # 7. gRPC Server Args (Only these go after --)
+        # --- 3. P4Runtime Options (Must come AFTER --) ---
         if self.grpc_port:
             args.append("--") 
             args.append("--grpc-server-addr 0.0.0.0:{}".format(self.grpc_port))
-            # Note: --device-id was removed from here
 
         cmd_str = ' '.join(args) + ' > ' + self.logfile + ' 2>&1 &'
         print("Starting P4Switch {}: {}".format(self.name, cmd_str))
@@ -75,7 +67,6 @@ class P4Switch(Switch):
         self.cmd('kill %' + self.sw_path)
         self.cmd('wait')
         super(P4Switch, self).stop()
-
 # --- Main ---
 
 def main():
