@@ -36,35 +36,30 @@ class P4Switch(Switch):
         self.logfile = '/tmp/p4s.{}.log'.format(self.name)
 
     def start(self, controllers):
-        # 1. Executable
         args = [self.sw_path]
         
-        # 2. JSON Config (MUST BE FIRST ARGUMENT)
-        # This matches "simple_switch_grpc inflow.json ..."
-        args.append(self.json_path)
-
-        # 3. Global Flags (BMv2 options)
+        # 1. Global BMv2 Flags
+        args.extend(['--device-id', str(self.dpid)])
         args.append("--log-console")
         if self.thrift_port:
             args.extend(['--thrift-port', str(self.thrift_port)])
         
-        # --cpu-port is a BMv2 option
-        args.extend(['--cpu-port', '255'])
-        
-        # 4. Interfaces (BMv2 options)
+        # 2. Interfaces
         for intf in self.intfs.values():
             if not intf.IP():
                 port_index = self.ports[intf]
                 args.extend(['-i', '{}@{}'.format(port_index, intf.name)])
         
-        # 5. GRPC / Stratum Options (MUST BE AFTER separator)
-        # The '--' separator tells BMv2 "stop parsing here, pass the rest to the target"
+        # 3. JSON Config (Last BMv2 arg)
+        args.append(self.json_path)
+        
+        # 4. Target-Specific Options (After --)
+        # We move --cpu-port here because it is specific to the simple_switch target
+        args.append("--") 
+        args.extend(['--cpu-port', '255'])
+        
         if self.grpc_port:
-            args.append("--") 
             args.append("--grpc-server-addr 0.0.0.0:{}".format(self.grpc_port))
-            
-            # MOVED: device-id belongs to the GRPC/Stratum layer
-            args.append("--device-id {}".format(self.dpid))
 
         cmd_str = ' '.join(args) + ' > ' + self.logfile + ' 2>&1 &'
         print("Starting P4Switch {}: {}".format(self.name, cmd_str))
