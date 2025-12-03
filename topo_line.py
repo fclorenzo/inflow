@@ -60,6 +60,10 @@ class P4Switch(Switch):
             args.append("--grpc-server-addr 0.0.0.0:{}".format(self.grpc_port))
 
         cmd_str = ' '.join(args) + ' > ' + self.logfile + ' 2>&1 &'
+        print("\n" + "="*60)
+        print(f"DEBUG: EXECUTION STRING FOR {self.name}:")
+        print(cmd_str)
+        print("="*60 + "\n")
         print("Starting P4Switch {}: {}".format(self.name, cmd_str))
         self.cmd(cmd_str)
 
