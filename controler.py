@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+
+# Add the utils folder to the path so we can import the libraries
+sys.path.append("utils")
+
+import p4runtime_lib.bmv2
+import p4runtime_lib.helper
+from p4runtime_lib.error_utils import printGrpcError
+from p4runtime_lib.switch import ShutdownAllSwitchConnections
+
+def write_ipv4_rules(p4info_helper, ingress_sw, destination, dst_eth_addr, port):
+    """
+    Installs a rule in the ipv4_lpm table.
+    """
+    table_entry = p4info_helper.buildTableEntry(
+        table_name="InFlowIngress.ipv4_lpm",
+        match_fields={
+            "hdr.ipv4.dstAddr": (destination, 32)
+        },
+        action_name="InFlowIngress.ipv4_forward",
+        action_params={
+            "dstAddr": dst_eth_addr,
+            "port": port
+        }
+    )
+    ingress_sw.WriteTableEntry(table_entry)
+    print(f"Installed IPv4 rule on {ingress_sw.name} for {destination}")
+
+def write_inflow_tag_rule(p4info_helper, sw, ingress_port, conf, integ, auth):
+    """
+    Installs a tagging rule on the ingress switch.
+    """
+    table_entry = p4info_helper.buildTableEntry(
+        table_name="InFlowIngress.inflow_op",
+        match_fields={
+            "std_meta.ingress_port": ingress_port
+        },
+        action_name="InFlowIngress.inflow_tag",
+        action_params={
+            "conf": conf,
+            "integ": integ,
+            "auth": auth
+        }
+    )
+    sw.WriteTableEntry(table_entry)
+    print(f"Installed TAG rule on {sw.name} port {ingress_port}")
+
+def write_inflow_declassify_rule(p4info_helper, sw, ingress_port):
+    """
+    Installs a declassify rule on the egress switch.
+    """
+    table_entry = p4info_helper.buildTableEntry(
+        table_name="InFlowIngress.inflow_op",
+        match_fields={
+            "std_meta.ingress_port": ingress_port
+        },
+        action_name="InFlowIngress.inflow_declassify",
+        action_params={}
+    )
+    sw.WriteTableEntry(table_entry)
+    print(f"Installed DECLASSIFY rule on {sw.name} port {ingress_port}")
+
+def write_arp_rules(p4info_helper, sw):
+    """
+    Installs simple L2 forwarding for ARP (Port 1 <-> Port 2).
+    """
+    # Port 1 -> 2
+    entry1 = p4info_helper.buildTableEntry(
+        table_name="InFlowIngress.l2_fwd",
+        match_fields={"std_meta.ingress_port": 1},
+        action_name="InFlowIngress.l2_forward",
+        action_params={"port": 2}
+    )
+    sw.WriteTableEntry(entry1)
+
+    # Port 2 -> 1
+    entry2 = p4info_helper.buildTableEntry(
+        table_name="InFlowIngress.l2_fwd",
+        match_fields={"std_meta.ingress_port": 2},
+        action_name="InFlowIngress.l2_forward",
+        action_params={"port": 1}
+    )
+    sw.WriteTableEntry(entry2)
+    print(f"Installed ARP rules on {sw.name}")
+
+def main(p4info_file_path, bmv2_file_path):
+    # Instantiate the P4Info helper
+    p4info_helper = p4runtime_lib.helper.P4InfoHelper(p4info_file_path)
+
+    try:
+        # Create switch connections
+        # Note: proto_dump_file writes all P4Runtime messages to a file for debugging
+        s1 = p4runtime_lib.bmv2.Bmv2SwitchConnection(
+            name='s1',
+            address='127.0.0.1:9090',
+            device_id=0,
+            proto_dump_file='logs/s1-p4runtime-requests.txt')
+        
+        s2 = p4runtime_lib.bmv2.Bmv2SwitchConnection(
+            name='s2',
+            address='127.0.0.1:9091',
+            device_id=1,
+            proto_dump_file='logs/s2-p4runtime-requests.txt')
+
+        s3 = p4runtime_lib.bmv2.Bmv2SwitchConnection(
+            name='s3',
+            address='127.0.0.1:9092',
+            device_id=2,
+            proto_dump_file='logs/s3-p4runtime-requests.txt')
+
+        # Send MasterArbitrationUpdate to establish this controller as master
+        s1.MasterArbitrationUpdate()
+        s2.MasterArbitrationUpdate()
+        s3.MasterArbitrationUpdate()
+
+        # Install the P4 program on the switches
+        s1.SetForwardingPipelineConfig(p4info=p4info_helper.p4info,
+                                       bmv2_json_file_path=bmv2_file_path)
+        s2.SetForwardingPipelineConfig(p4info=p4info_helper.p4info,
+                                       bmv2_json_file_path=bmv2_file_path)
+        s3.SetForwardingPipelineConfig(p4info=p4info_helper.p4info,
+                                       bmv2_json_file_path=bmv2_file_path)
+
+        print("--- P4 Pipeline Installed ---")
+
+        # --- 1. Install ARP Rules ---
+        write_arp_rules(p4info_helper, s1)
+        write_arp_rules(p4info_helper, s2)
+        write_arp_rules(p4info_helper, s3)
+
+        # --- 2. Install IPv4 Routing ---
+        # s1 routing
+        write_ipv4_rules(p4info_helper, s1, "10.0.3.2", "00:00:00:00:03:02", 2)
+        write_ipv4_rules(p4info_helper, s1, "10.0.1.1", "00:00:00:00:01:01", 1)
+        
+        # s2 routing
+        write_ipv4_rules(p4info_helper, s2, "10.0.3.2", "00:00:00:00:03:02", 2)
+        write_ipv4_rules(p4info_helper, s2, "10.0.1.1", "00:00:00:00:01:01", 1)
+
+        # s3 routing
+        write_ipv4_rules(p4info_helper, s3, "10.0.3.2", "00:00:00:00:03:02", 2)
+        write_ipv4_rules(p4info_helper, s3, "10.0.1.1", "00:00:00:00:01:01", 1)
+
+        # --- 3. Install InFlow Policies ---
+        
+        # S1: Tag traffic from Host 1
+        # Conf=1, Integ=1, Auth=0x55 (Hardcoded for now, logic to come later)
+        write_inflow_tag_rule(p4info_helper, s1, ingress_port=1, conf=1, integ=1, auth=0x55)
+        # S1: Declassify return traffic
+        write_inflow_declassify_rule(p4info_helper, s1, ingress_port=2)
+
+        # S3: Declassify traffic to Host 2
+        write_inflow_declassify_rule(p4info_helper, s3, ingress_port=1)
+        # S3: Tag return traffic from Host 2
+        write_inflow_tag_rule(p4info_helper, s3, ingress_port=2, conf=1, integ=1, auth=0x55)
+
+        print("--- All Rules Installed Successfully ---")
+
+    except KeyboardInterrupt:
+        print(" Shutting down.")
+    except Exception as e:
+        printGrpcError(e)
+
+    ShutdownAllSwitchConnections()
+
+if __name__ == '__main__':
+    if not os.path.exists('logs'):
+        os.mkdir('logs')
+    
+    # Default paths
+    p4info = 'inflow.p4.p4info.txt' 
+    json = 'inflow.json'
+    
+    # Check if p4info exists (the compiler might have named it differently)
+    # Usually p4c generates 'inflow.p4info.txt' or similar based on args
+    # Adjust this path based on your actual file generation
+    if not os.path.exists(p4info):
+        # Try to find it
+        if os.path.exists("inflow.p4info.txt"):
+            p4info = "inflow.p4info.txt"
+        
+    main(p4info, json)
