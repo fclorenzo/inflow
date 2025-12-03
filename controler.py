@@ -170,16 +170,20 @@ if __name__ == '__main__':
     if not os.path.exists('logs'):
         os.mkdir('logs')
     
-    # Default paths
-    p4info = 'inflow.p4.p4info.txt' 
-    json = 'inflow.json'
+    # 1. MATCH THIS filename exactly with your compile command output
+    # You ran: --p4runtime-files inflow.p4info.txtpb
+    p4info_path = 'inflow.p4info.txtpb' 
+    json_path = 'inflow.json'
     
-    # Check if p4info exists (the compiler might have named it differently)
-    # Usually p4c generates 'inflow.p4info.txt' or similar based on args
-    # Adjust this path based on your actual file generation
-    if not os.path.exists(p4info):
-        # Try to find it
-        if os.path.exists("inflow.p4info.txt"):
-            p4info = "inflow.p4info.txt"
+    # 2. Verify files exist before trying to run
+    if not os.path.exists(p4info_path):
+        print(f"ERROR: Could not find P4Info file: {p4info_path}")
+        print("Did you compile with: --p4runtime-files inflow.p4info.txtpb ?")
+        sys.exit(1)
         
-    main(p4info, json)
+    if not os.path.exists(json_path):
+        print(f"ERROR: Could not find JSON file: {json_path}")
+        sys.exit(1)
+
+    # 3. Run
+    main(p4info_path, json_path)
