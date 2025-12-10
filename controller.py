@@ -2,6 +2,9 @@
 
 import sys
 import os
+import hmac
+import hashlib
+import struct
 
 # Add the utils folder to the path so we can import the libraries
 sys.path.append("utils")
@@ -86,6 +89,26 @@ def write_arp_rules(p4info_helper, sw):
     sw.WriteTableEntry(entry2)
     print(f"Installed ARP rules on {sw.name}")
 
+def calculate_auth_token(conf, integ, secret_key):
+    """
+    Calculates an 8-bit HMAC-SHA256 auth token.
+    """
+    # Pack the data into bytes (2 unsigned shorts)
+    # '>' means Big Endian, 'H' means unsigned short (2 bytes)
+    message = struct.pack('>HH', conf, integ)
+    
+    # Create the HMAC using SHA256
+    # key must be bytes
+    key_bytes = bytes(secret_key, 'utf-8')
+    h = hmac.new(key_bytes, message, hashlib.sha256)
+    
+    # Get the digest
+    digest = h.digest()
+    
+    # Take the first byte (8 bits) as our Auth Token
+    # In a real system, you'd want more bits, but our P4 header is bit<8>
+    return digest[0]
+
 def main(p4info_file_path, bmv2_file_path):
     # Instantiate the P4Info helper
     p4info_helper = p4runtime_lib.helper.P4InfoHelper(p4info_file_path)
@@ -145,16 +168,31 @@ def main(p4info_file_path, bmv2_file_path):
 
         # --- 3. Install InFlow Policies ---
         
-        # S1: Tag traffic from Host 1
-        # Conf=1, Integ=1, Auth=0x55 (Hardcoded for now, logic to come later)
-        write_inflow_tag_rule(p4info_helper, s1, ingress_port=1, conf=1, integ=1, auth=0x55)
+        # Define a Secret Key (Known only to the Controller)
+        SECRET_KEY = "MySuperSecretKey"
+
+        # Define the policy we want to enforce
+        # Example: Conf=1, Integ=1
+        target_conf = 1
+        target_integ = 1
+        
+        # Calculate the VALID token for this policy
+        valid_auth = calculate_auth_token(target_conf, target_integ, SECRET_KEY)
+        print(f"Calculated Auth Token for ({target_conf}, {target_integ}) is: {hex(valid_auth)}")
+
+        # S1: Tag traffic from Host 1 with the calculated token
+        write_inflow_tag_rule(p4info_helper, s1, ingress_port=1, 
+                              conf=target_conf, integ=target_integ, auth=valid_auth)
+        
         # S1: Declassify return traffic
         write_inflow_declassify_rule(p4info_helper, s1, ingress_port=2)
 
         # S3: Declassify traffic to Host 2
         write_inflow_declassify_rule(p4info_helper, s3, ingress_port=1)
+        
         # S3: Tag return traffic from Host 2
-        write_inflow_tag_rule(p4info_helper, s3, ingress_port=2, conf=1, integ=1, auth=0x55)
+        write_inflow_tag_rule(p4info_helper, s3, ingress_port=2, 
+                              conf=target_conf, integ=target_integ, auth=valid_auth)
 
         print("--- All Rules Installed Successfully ---")
 
