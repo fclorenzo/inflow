@@ -51,7 +51,7 @@ struct headers_t {
 
 // We can add fields here for Phase 2
 struct metadata_t {
-    // Empty for now
+    bit<1> verify_auth; // 1 = Check Auth, 0 = Don't Check
 }
 
 // --- 2. Parser Definition ---
@@ -134,10 +134,11 @@ control InFlowIngress(inout headers_t hdr,
     
     // --- NEW ACTIONS FOR PHASE 5 ---
 
-    // ACTION: Transit Check (Triggered by S2)
-    // This tells the switch: "Go check the auth table!"
+// ACTION: Transit Check (Triggered by S2)
+    // Old way: auth_check.apply();  <-- CAUSED ERROR
+    // New way: Set the flag
     action inflow_transit() {
-        auth_check.apply();
+        meta.verify_auth = 1;
     }
 
     // ACTION: Auth Match (Used when token is valid)
@@ -185,21 +186,26 @@ control InFlowIngress(inout headers_t hdr,
         default_action = drop();
     }
 
-    // --- Pipeline Logic ---
+// --- Pipeline Logic ---
     apply {
         if (hdr.ipv4.isValid()) {
-            // 1. Security Operations (Tag, Declassify, or Verify?)
+            // 1. Security Operations
+            // This might run 'inflow_transit', which sets meta.verify_auth = 1
             inflow_op.apply();
+
+            // 2. Check if we need to verify authentication
+            if (meta.verify_auth == 1) {
+                auth_check.apply();
+            }
             
-            // 2. Routing
+            // 3. Routing
             ipv4_lpm.apply();
         } 
         else if (hdr.eth.etherType == 0x0806) {
             l2_fwd.apply();
         }
     }
-}
-
+    
 // --- 4. Egress Control (Phase 2) ---
 
 // This is the "Egress Match-Action Pipeline" [cite: 38, 92]
