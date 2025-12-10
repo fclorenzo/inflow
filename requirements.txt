@@ -1,0 +1,12 @@
+# Packet Manipulation (for rogue_packet.py)
+scapy>=2.4.5
+
+# P4Runtime Controller Dependencies (for controller.py)
+grpcio>=1.35.0
+protobuf>=3.14.0
+googleapis-common-protos>=1.52.0
+
+# Note: Mininet is required for topo_line.py.
+# It is usually installed via system package managers (e.g., 'sudo apt-get install mininet'),
+# but if you are in a virtual env, you can try the python binding:
+mininet
