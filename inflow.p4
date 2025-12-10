@@ -205,7 +205,8 @@ control InFlowIngress(inout headers_t hdr,
             l2_fwd.apply();
         }
     }
-    
+}
+
 // --- 4. Egress Control (Phase 2) ---
 
 // This is the "Egress Match-Action Pipeline" [cite: 38, 92]
