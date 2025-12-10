@@ -96,8 +96,6 @@ parser InFlowParser(packet_in packet,
 
 // --- 3. Ingress Control (Phase 2) ---
 
-// --- 3. Ingress Control (Phase 2 Implementation) ---
-
 control InFlowIngress(inout headers_t hdr,
                       inout metadata_t meta,
                       inout standard_metadata_t std_meta) {
@@ -108,116 +106,94 @@ control InFlowIngress(inout headers_t hdr,
         mark_to_drop(std_meta);
     }
 
-    // Standard IPv4 forwarding action [cite: 2808, 1431]
     action ipv4_forward(bit<48> dstAddr, bit<9> port) {
-        // Update DMAC/SMAC (simplified for this lab)
-        hdr.eth.srcAddr = hdr.eth.dstAddr; 
+        hdr.eth.srcAddr = hdr.eth.dstAddr;
         hdr.eth.dstAddr = dstAddr;
-        
-        // Set egress port
         std_meta.egress_spec = port;
-        
-        // Decrement TTL
         hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
     }
 
-    // Action: Simple L2 Forwarding (for ARP)
     action l2_forward(bit<9> port) {
         std_meta.egress_spec = port;
     }
 
     // ACTION: Tagging (Source Domain / S1)
-    // Adds the IFC header and sets the initial masks
     action inflow_tag(bit<16> conf, bit<16> integ, bit<8> auth) {
-        // 1. Validate the header
         hdr.ifc.setValid();
-        
-        // 2. Set the data
         hdr.ifc.conf_mask = conf;
         hdr.ifc.integ_mask = integ;
         hdr.ifc.auth = auth;
-
-        // 3. Update EtherType to indicate this is now an InFlow packet
-        // The parser will see this on the NEXT switch
         hdr.eth.etherType = ETHERTYPE_INFLOW;
     }
 
     // ACTION: Declassification (Destination Domain / S3)
-    // Removes the IFC header
     action inflow_declassify() {
-        // We don't need to check if it is valid. 
-        // If it is valid, this makes it invalid.
-        // If it is already invalid, it stays invalid (no-op).
         hdr.ifc.setInvalid();
-            
-        // Restore EtherType to standard IPv4
-        // This ensures the next hop interprets the payload correctly
         hdr.eth.etherType = ETHERTYPE_IPV4;
     }
     
-    // ACTION: Transit (No-Op for now, just validation in future)
+    // --- NEW ACTIONS FOR PHASE 5 ---
+
+    // ACTION: Transit Check (Triggered by S2)
+    // This tells the switch: "Go check the auth table!"
     action inflow_transit() {
-        // In the future, we will check Auth here.
-        // For now, we just let it pass.
+        auth_check.apply();
+    }
+
+    // ACTION: Auth Match (Used when token is valid)
+    // If the table finds a match, we do nothing (allow packet).
+    action auth_match() {
+        // No-op: Packet is safe.
     }
 
     // --- Tables ---
 
-    // Table 1: Routing
-    // Matches Destination IP -> Output Port
     table ipv4_lpm {
-        key = {
-            hdr.ipv4.dstAddr: lpm;
-        }
-        actions = {
-            ipv4_forward;
-            drop;
-            NoAction;
-        }
+        key = { hdr.ipv4.dstAddr: lpm; }
+        actions = { ipv4_forward; drop; NoAction; }
         size = 1024;
         default_action = drop();
     }
 
-    // Table 2: Security Operations
-    // Matches Ingress Port -> Security Action (Tag/Declassify)
-    // This allows the Controller to tell S1 "Tag packets coming from Host 1"
+    // This handles Tagging and Declassifying
     table inflow_op {
-        key = {
-            std_meta.ingress_port: exact;
-        }
-        actions = {
-            inflow_tag;
-            inflow_declassify;
-            inflow_transit;
-            NoAction;
-        }
+        key = { std_meta.ingress_port: exact; }
+        actions = { inflow_tag; inflow_declassify; inflow_transit; NoAction; }
         size = 1024;
         default_action = NoAction();
     }
 
-    // New Table: Handle ARP (and other L2 broadcast)
     table l2_fwd {
+        key = { std_meta.ingress_port: exact; }
+        actions = { l2_forward; drop; }
+        size = 1024;
+        default_action = drop();
+    }
+
+    // --- NEW TABLE FOR PHASE 5 ---
+    // The Firewall Table
+    // Matches specific (Conf + Integ + Auth) combinations.
+    // If a packet has a token that isn't in this table -> DROP.
+    table auth_check {
         key = {
-            std_meta.ingress_port: exact;
+            hdr.ifc.conf_mask: exact;
+            hdr.ifc.integ_mask: exact;
+            hdr.ifc.auth: exact;
         }
-        actions = {
-            l2_forward;
-            drop;
-        }
+        actions = { auth_match; drop; }
         size = 1024;
         default_action = drop();
     }
 
     // --- Pipeline Logic ---
     apply {
-        // Check if it is an IPv4 packet (or InFlow-encapsulated IPv4)
         if (hdr.ipv4.isValid()) {
-            // 1. Security Operations
+            // 1. Security Operations (Tag, Declassify, or Verify?)
             inflow_op.apply();
+            
             // 2. Routing
             ipv4_lpm.apply();
         } 
-        // If NOT IPv4, check if it is ARP (0x0806)
         else if (hdr.eth.etherType == 0x0806) {
             l2_fwd.apply();
         }
