@@ -51,11 +51,11 @@ def run_tests(net, phase, sizes):
         ping_out = h1.cmd(f'ping -c 10 -s {size} {h2.IP()}')
         latency = parse_ping(ping_out)
         
-        # 2. Throughput Test (iPerf)
-        # Start iPerf server on h2, run client on h1 (UDP mode to force specific packet sizes)
-        h2.cmd('iperf -s -u &')
+# 2. Throughput Test (iPerf - TCP mode)
+        h2.cmd('iperf -s &')
         time.sleep(1) # Let server start
-        iperf_out = h1.cmd(f'iperf -c {h2.IP()} -u -b 100M -l {size} -t 5')
+        # Use TCP (no -u, no -b), which gives accurate goodput
+        iperf_out = h1.cmd(f'iperf -c {h2.IP()} -l {size} -t 5')
         h2.cmd('kill %iperf') # Stop server
         throughput = parse_iperf(iperf_out)
         
@@ -101,7 +101,7 @@ def plot_and_save(baseline, inflow, sizes):
     plt.title('Network Throughput Comparison (UDP)')
     plt.grid(True)
     plt.legend()
-    plt.savefig(os.path.join(benchmark_dir, '/throughput_comparison.png'))
+    plt.savefig(os.path.join(benchmark_dir, 'throughput_comparison.png'))
     print("Saved 'throughput_comparison.png'")
     time.sleep(1)
 
