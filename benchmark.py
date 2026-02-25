@@ -103,6 +103,7 @@ def plot_and_save(baseline, inflow, sizes):
     plt.legend()
     plt.savefig(os.path.join(benchmark_dir, '/throughput_comparison.png'))
     print("Saved 'throughput_comparison.png'")
+    time.sleep(1)
 
 def cleanup_mininet():
     print("--- Cleaning up leftover Mininet processes ---")
