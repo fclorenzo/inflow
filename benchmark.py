@@ -5,6 +5,7 @@ import time
 import csv
 import re
 import matplotlib.pyplot as plt
+import subprocess
 
 # Mininet imports
 from mininet.net import Mininet
@@ -102,6 +103,17 @@ def plot_and_save(baseline, inflow, sizes):
     plt.legend()
     plt.savefig(os.path.join(benchmark_dir, '/throughput_comparison.png'))
     print("Saved 'throughput_comparison.png'")
+
+def cleanup_mininet():
+    print("--- Cleaning up leftover Mininet processes ---")
+    # 'mn -c' cleans up mininet network namespaces and virtual interfaces
+    subprocess.run(['sudo', 'mn', '-c'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    
+    # Aggressively kill any lingering P4 switches or iperf servers just in case
+    subprocess.run(['sudo', 'killall', '-9', 'simple_switch_grpc'], stderr=subprocess.DEVNULL)
+    subprocess.run(['sudo', 'killall', '-9', 'iperf'], stderr=subprocess.DEVNULL)
+    
+    time.sleep(2) # Give the system a moment to fully clear the resources
 
 def main():
     setLogLevel('error') # Keep mininet quiet so we can see our logs
