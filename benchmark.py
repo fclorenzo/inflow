@@ -67,7 +67,7 @@ def plot_and_save(baseline, inflow, sizes):
     print("\n--- Generating Graphs and CSV ---")
     
     # 1. Save CSV
-    with open(benchmark_dir/'benchmark_results.csv', 'w', newline='') as csvfile:
+    with open(os.path.join(benchmark_dir, 'benchmark_results.csv'), 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(['Phase', 'Size (Bytes)', 'Latency (ms)', 'Throughput (Mbps)'])
         for s in sizes:
@@ -86,7 +86,7 @@ def plot_and_save(baseline, inflow, sizes):
     plt.title('Network Latency Comparison')
     plt.grid(True)
     plt.legend()
-    plt.savefig(benchmark_dir/'latency_comparison.png')
+    plt.savefig(os.path.join(benchmark_dir, 'latency_comparison.png'))
     print("Saved 'latency_comparison.png'")
 
     # 3. Plot Throughput
@@ -100,7 +100,7 @@ def plot_and_save(baseline, inflow, sizes):
     plt.title('Network Throughput Comparison (UDP)')
     plt.grid(True)
     plt.legend()
-    plt.savefig(benchmark_dir/'/throughput_comparison.png')
+    plt.savefig(os.path.join(benchmark_dir, '/throughput_comparison.png'))
     print("Saved 'throughput_comparison.png'")
 
 def main():
