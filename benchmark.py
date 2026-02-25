@@ -50,7 +50,10 @@ def run_tests(net, phase, sizes):
         h1.cmd('killall -9 iperf')
         h2.cmd('killall -9 iperf')
         time.sleep(0.5)
-        
+
+        # 0.5 WARM UP THE NETWORK (Do not record this one)
+        h1.cmd(f'ping -c 2 {h2.IP()}')
+
         # 1. Latency Test (Ping) - Runs while CPU is completely quiet!
         ping_out = h1.cmd(f'ping -c 10 -s {size} {h2.IP()}')
         latency = parse_ping(ping_out)
