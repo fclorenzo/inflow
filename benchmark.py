@@ -40,9 +40,18 @@ def run_tests(net, phase, sizes):
     print(f"\n--- Starting {phase} Tests ---")
     h1 = net.get('h1')
     h2 = net.get('h2')
+
+    # 1. Warm up ARP tables and P4 rule cache
+    h1.cmd(f'ping -c 2 {h2.IP()}')
     
+    # 2. Load the network to force Linux buffer allocation (2-second blast)
+    h2.cmd('iperf -s -u &')
+    time.sleep(1)
+    h1.cmd(f'iperf -c {h2.IP()} -u -b 5M -l 512 -t 2')
+    h2.cmd('killall -9 iperf')
+    time.sleep(1) # Let the CPU settle back down to 0%
+
     results = {}
-    
     for size in sizes:
         print(f"Testing Packet Size: {size} Bytes...")
         
@@ -50,9 +59,6 @@ def run_tests(net, phase, sizes):
         h1.cmd('killall -9 iperf')
         h2.cmd('killall -9 iperf')
         time.sleep(0.5)
-
-        # 0.5 WARM UP THE NETWORK (Do not record this one)
-        h1.cmd(f'ping -c 2 {h2.IP()}')
 
         # 1. Latency Test (Ping) - Runs while CPU is completely quiet!
         ping_out = h1.cmd(f'ping -c 10 -s {size} {h2.IP()}')
