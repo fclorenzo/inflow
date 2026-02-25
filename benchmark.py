@@ -46,18 +46,26 @@ def run_tests(net, phase, sizes):
     for size in sizes:
         print(f"Testing Packet Size: {size} Bytes...")
         
+        # 0. ALWAYS clear stuck processes before starting a loop
+        h1.cmd('killall -9 iperf')
+        h2.cmd('killall -9 iperf')
+        
         # 1. Latency Test (Ping)
         # We send 10 pings to get a stable average
         ping_out = h1.cmd(f'ping -c 10 -s {size} {h2.IP()}')
         latency = parse_ping(ping_out)
         
-# 2. Throughput Test (iPerf - TCP mode)
-        h2.cmd('iperf -s &')
-        time.sleep(1) # Let server start
-        # Use TCP (no -u, no -b), which gives accurate goodput
-        iperf_out = h1.cmd(f'iperf -c {h2.IP()} -l {size} -t 5')
-        h2.cmd('kill %iperf') # Stop server
+        # 2. Throughput Test (iPerf TCP)
+        # -s = Server mode | -D = Run as background daemon safely
+        h2.cmd('iperf -s -D')
+        time.sleep(1) # Let server start fully
+        
+        # -c = Client | -l = Size | -t = Time | -f m = Force Megabits format
+        iperf_out = h1.cmd(f'iperf -c {h2.IP()} -l {size} -t 5 -f m')
         throughput = parse_iperf(iperf_out)
+        
+        # 3. Aggressively kill the server after the test is done
+        h2.cmd('killall -9 iperf')
         
         results[size] = {'latency': latency, 'throughput': throughput}
         print(f"  Result -> Latency: {latency} ms | Throughput: {throughput} Mbps")
