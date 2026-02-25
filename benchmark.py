@@ -41,42 +41,31 @@ def run_tests(net, phase, sizes):
     h1 = net.get('h1')
     h2 = net.get('h2')
 
-    # 1. Warm up ARP tables and P4 rule cache
-    h1.cmd(f'ping -c 2 {h2.IP()}')
-    
-    # 2. Load the network to force Linux buffer allocation (2-second blast)
-    h2.cmd('iperf -s -u &')
-    time.sleep(1)
-    h1.cmd(f'iperf -c {h2.IP()} -u -b 5M -l 512 -t 2')
-    h2.cmd('killall -9 iperf')
-    time.sleep(1) # Let the CPU settle back down to 0%
-
     results = {}
     for size in sizes:
         print(f"Testing Packet Size: {size} Bytes...")
         
-        # 0. Kill any leftover iperf zombies BEFORE testing latency
+        # 0. Kill leftovers
         h1.cmd('killall -9 iperf')
         h2.cmd('killall -9 iperf')
         time.sleep(0.5)
 
-        # 1. Latency Test (Ping) - Runs while CPU is completely quiet!
+        # 1. Latency Test (Ping)
         ping_out = h1.cmd(f'ping -c 10 -s {size} {h2.IP()}')
         latency = parse_ping(ping_out)
         
-        # 2. Throughput Test (UDP - Capped at 15M to prevent switch crash)
+        # 2. Throughput Test (UDP - Capped at 5M so BMv2 can handle the PPS)
         h2.cmd('iperf -s -u &')
-        time.sleep(1) # Let server start
+        time.sleep(1) 
         
-        # Blast UDP at exactly 15 Mbps (Safe for software switches)
-        iperf_out = h1.cmd(f'iperf -c {h2.IP()} -u -b 15M -l {size} -t 5')
+        # Blast UDP at exactly 5 Mbps
+        iperf_out = h1.cmd(f'iperf -c {h2.IP()} -u -b 5M -l {size} -t 5')
         throughput = parse_iperf(iperf_out)
         
-        # Fallback just in case parser fails, so the script doesn't crash
         if throughput is None:
             throughput = 0.0 
             
-        # 3. Kill the server so it doesn't ruin the NEXT loop's ping test!
+        # 3. Aggressive cleanup
         h2.cmd('killall -9 iperf')
         time.sleep(0.5)
         
@@ -189,7 +178,11 @@ def main():
     # 3. Setup Baseline (Basic routing, no InFlow security)
     install_static_rules(p4info_helper, s1_conn, s2_conn, s3_conn)
     time.sleep(1)
-    
+
+    # WARMUP: Run the exact suite once just to stretch the OS buffers!
+    # We do not save these results.
+    run_tests(net, 'Warmup (Dry Run)', sizes)
+
     # 4. Run Baseline Tests
     baseline_results = run_tests(net, 'Baseline', sizes)
 
