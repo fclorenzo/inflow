@@ -10,3 +10,6 @@ googleapis-common-protos>=1.52.0
 # It is usually installed via system package managers (e.g., 'sudo apt-get install mininet'),
 # but if you are in a virtual env, you can try the python binding:
 mininet
+
+# Testing
+matplotlib
