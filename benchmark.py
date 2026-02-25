@@ -46,26 +46,30 @@ def run_tests(net, phase, sizes):
     for size in sizes:
         print(f"Testing Packet Size: {size} Bytes...")
         
-        # 0. ALWAYS clear stuck processes before starting a loop
+        # 0. Kill any leftover iperf zombies BEFORE testing latency
         h1.cmd('killall -9 iperf')
         h2.cmd('killall -9 iperf')
+        time.sleep(0.5)
         
-        # 1. Latency Test (Ping)
-        # We send 10 pings to get a stable average
+        # 1. Latency Test (Ping) - Runs while CPU is completely quiet!
         ping_out = h1.cmd(f'ping -c 10 -s {size} {h2.IP()}')
         latency = parse_ping(ping_out)
         
-        # 2. Throughput Test (iPerf TCP)
-        # -s = Server mode | -D = Run as background daemon safely
-        h2.cmd('iperf -s -D')
-        time.sleep(1) # Let server start fully
+        # 2. Throughput Test (UDP - Capped at 15M to prevent switch crash)
+        h2.cmd('iperf -s -u &')
+        time.sleep(1) # Let server start
         
-        # -c = Client | -l = Size | -t = Time | -f m = Force Megabits format
-        iperf_out = h1.cmd(f'iperf -c {h2.IP()} -l {size} -t 5 -f m')
+        # Blast UDP at exactly 15 Mbps (Safe for software switches)
+        iperf_out = h1.cmd(f'iperf -c {h2.IP()} -u -b 15M -l {size} -t 5')
         throughput = parse_iperf(iperf_out)
         
-        # 3. Aggressively kill the server after the test is done
+        # Fallback just in case parser fails, so the script doesn't crash
+        if throughput is None:
+            throughput = 0.0 
+            
+        # 3. Kill the server so it doesn't ruin the NEXT loop's ping test!
         h2.cmd('killall -9 iperf')
+        time.sleep(0.5)
         
         results[size] = {'latency': latency, 'throughput': throughput}
         print(f"  Result -> Latency: {latency} ms | Throughput: {throughput} Mbps")
